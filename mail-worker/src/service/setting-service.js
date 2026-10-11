@@ -197,6 +197,32 @@ const settingService = {
 		return this.get(c);
 	},
 
+	// Optional per-host restriction of the domain suffixes shown in the UI.
+	// Set the `host_domain` variable to a JSON map, e.g. {"mail.sensilab.sg":["sensilab.sg"]}.
+	// Hosts that are not in the map (or no variable at all) keep the full list.
+	// This only affects what the web UI offers; receiving and sending still use `domain`.
+	filterDomainsByHost(c, domainList) {
+		let map = c.env.host_domain;
+		if (!map) return domainList;
+		if (typeof map === 'string') {
+			try {
+				map = JSON.parse(map);
+			} catch (e) {
+				return domainList;
+			}
+		}
+		let host = '';
+		try {
+			host = new URL(c.req.url).hostname.toLowerCase();
+		} catch (e) {
+			return domainList;
+		}
+		const allowed = map[host];
+		if (!Array.isArray(allowed) || allowed.length === 0) return domainList;
+		const filtered = domainList.filter(item => allowed.includes(item.replace(/^@/, '')));
+		return filtered.length > 0 ? filtered : domainList;
+	},
+
 	async websiteConfig(c) {
 
 		const settingRow = await this.get(c, true);
@@ -215,7 +241,7 @@ const settingService = {
 			siteKey: settingRow.siteKey,
 			background: settingRow.background,
 			loginOpacity: settingRow.loginOpacity,
-			domainList: settingRow.loginDomain === 1 && !token ? [] : settingRow.domainList,
+			domainList: this.filterDomainsByHost(c, settingRow.loginDomain === 1 && !token ? [] : settingRow.domainList),
 			regKey: settingRow.regKey,
 			regVerifyOpen: settingRow.regVerifyOpen,
 			addVerifyOpen: settingRow.addVerifyOpen,
